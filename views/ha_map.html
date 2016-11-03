@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+   <% include ../partials/head %>
+</head>
+
+<body class="container">
+
+    <header>
+        <% include ../partials/header %>
+    </header>
+
+    <main>
+        <div class="jumbotron">
+            <h1>Heat map of happniess</h1>
+        </div>
+        <div class="col-xs-12 thumbnail">
+          <div id = "map"></div>
+        </div>
+    </main>
+
+    <footer>
+        <% include ../partials/footer %>
+    </footer>
+</body>
+
+    <style type = "text/css">
+    .q0-9 { fill:#fff7ec; }
+    .q1-9 { fill:#fee8c8; }
+    .q2-9 { fill:#fdd49e; }
+    .q3-9 { fill:#fdbb84; }
+    .q4-9 { fill:#fc8d59; }
+    .q5-9 { fill:#ef6548; }
+    .q6-9 { fill:#d7301f; }
+    .q7-9 { fill:#b30000; }
+    .q8-9 { fill:#7f0000; }
+    .q9-9 { fill:rgb(255,255,255); }
+
+
+    div.tooltip {   
+      line-height: 1;
+  font-weight: bold;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.8);
+  color: #fff;
+  border-radius: 2px;         
+    }
+
+    svg{
+      stroke: grey;
+      stroke-width = 0.01 px；
+        stroke-linejoin: round;
+        stroke-linecap: round;
+    }
+
+    .background {
+  fill: none;
+  pointer-events: all;
+}
+
+
+.legend {
+    font-size: 12px;
+  }
+/*  rect {
+    stroke-width: 2;
+  }*/
+
+    </style>
+     <script src = "//d3js.org/d3.v3.min.js"></script>
+       <script>
+var data = JSON.parse('<%- JSON.stringify(data) %>');
+var aumap = JSON.parse('<%- JSON.stringify(map) %>');
+
+      var width = 1125,
+      height = 550,
+      scale0 = 15000;
+      w = -37500;
+      h = -10450;
+
+      var min = 1.2;
+      var max = 2.125;
+      var diff = (max - min) / 8; 
+
+      var quantile = d3.scale.quantile()
+          .domain([min, min+diff, min + 2*diff, min + 3*diff, min +4*diff,min + 5*diff, min + 6*diff,min + 7*diff,min + 8*diff])
+          .range(d3.range(9).map(function(i) { return "q" + i + "-9"; }));
+          
+      var text = [];
+      for(var i = 0; i < 9; i ++){
+        var tmp = min + i * diff;
+        text.push(""+tmp);
+      }
+        
+    var color = d3.scale.ordinal()
+    .domain([text[0], text[1], text[2], text[3], text[4], text[5], text[6], text[7], text[8], "undefined"])
+    .range(["#fff7ec", "#fee8c8", "#fdd49e", "#fdbb84", "#fc8d59", "#ef6548", "#d7301f", "#b30000", "#7f0000"]);
+
+      var projection = d3.geo.mercator()
+                        .scale(scale0)
+                        .translate([w, h]);
+
+      var path = d3.geo.path()
+              .projection(projection);
+
+      var zoom = d3.behavior.zoom()
+          .translate(projection.translate())
+          .scale(projection.scale())
+          .scaleExtent([scale0, 100 * scale0])
+          .on("zoom", zoomed);
+
+      var div = d3.select("body").append("div")   
+              .attr("class", "tooltip")               
+              .style("opacity", 0);
+
+      var canvas = d3.select("#map").append("svg")
+               .attr("width",width)
+               .attr("height",height);
+               // .append("g");
+
+      var g = canvas.append("g")
+                    .call(zoom);
+
+      g.append("rect")
+          .attr("class", "background")
+          .attr("width", width)
+          .attr("height", height);
+
+        var rateById = {};
+        var nameById = {};
+
+        data.forEach(function(d){
+          rateById[d.value.id] = +d.value.happiness;
+          nameById[d.value.id] = d.value.suburbName;
+        });
+
+        g
+          .append("g")
+          .attr("id","suburb")
+          .selectAll("path")
+          .data(aumap.features)
+          .enter().append("path")
+          .attr("class",function(d){
+              if(rateById[d.properties.REGION])
+                return quantile(rateById[d.properties.REGION]);
+              else
+                return "q9-9";
+              }
+              )
+          .attr("d",path)
+          .style("opacity", 0.8)
+          .on("click", clicked)
+
+          .on("mouseover", function(d) {
+              d3.select(this).transition().duration(300).style("opacity", 1);
+              div.transition().duration(300)
+                .style("opacity", 1);
+
+              if(nameById[d.properties.REGION]){
+                div.text(nameById[d.properties.REGION] + " : " + rateById[d.properties.REGION])
+                .style("left", (d3.event.pageX) + "px")
+                .style("top", (d3.event.pageY -30) + "px");
+              }
+            })
+
+            .on("mouseout", function() {
+              d3.select(this)
+                .transition().duration(300)
+                .style("opacity", 0.8);
+              div.transition().duration(300)
+                .style("opacity", 0);
+            });
+
+//Add Legend
+
+var legendRectSize = 12;
+var legendSpacing = 7;
+
+var legend = d3.select('svg')
+    .append("g")
+    .selectAll("g")
+    .data(color.domain())
+    .enter()
+    .append('g')
+      .attr('class', 'legend')
+      .attr('transform', function(d, i) {
+        var height = legendRectSize;
+        var x = 20;
+        var y = i * height + 30;
+        return 'translate(' + x + ',' + y + ')';
+    });
+
+legend.append('rect')
+    .attr('width', legendRectSize)
+    .attr('height', legendRectSize)
+    .style('fill', color)
+    .style('stroke', color);
+
+legend.append('text')
+    .attr('x', legendRectSize + legendSpacing)
+    .attr('y', legendRectSize - legendSpacing + 4)
+    .text(function(d) { return d; });
+
+
+function clicked(d) {
+  var centroid = path.centroid(d),
+      translate = projection.translate();
+
+  projection.translate([
+    translate[0] - centroid[0] + width / 2,
+    translate[1] - centroid[1] + height / 2
+  ]);
+
+  zoom.translate(projection.translate());
+
+  g.selectAll("path").transition()
+      .duration(700)
+      .attr("d", path);
+}
+
+function zoomed() {
+  projection.translate(d3.event.translate).scale(d3.event.scale);
+  g.selectAll("path").attr("d", path);
+}
+
+    </script>
+</html>
